@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Warden · Real-Time Transaction Screening</title>
+<style>
+:root{
+  --bg:#0b1420; --panel:#121e2e; --panel2:#0f1826; --line:#233248;
+  --text:#e8eef7; --sub:#8fa3bd; --mute:#5b6f8c;
+  --safe:#3ddc97; --safe-dim:#173328;
+  --warn:#f5b544; --warn-dim:#3a2c10;
+  --stop:#ff5d6c; --stop-dim:#3a1418;
+  --accent:#5b8dee;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: -apple-system, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f4f7fb; --panel:#ffffff; --panel2:#eef2f8; --line:#dbe3ee;
+    --text:#101a28; --sub:#4d6079; --mute:#8598b3;
+    --safe-dim:#e3faf1; --warn-dim:#fef3e0; --stop-dim:#ffe9eb;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b1420; --panel:#121e2e; --panel2:#0f1826; --line:#233248;
+  --text:#e8eef7; --sub:#8fa3bd; --mute:#5b6f8c;
+  --safe-dim:#173328; --warn-dim:#3a2c10; --stop-dim:#3a1418;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);height:100%;}
+body{padding:22px 18px 60px;min-height:100%;}
+.wrap{max-width:640px;margin:0 auto;}
+.wrap.wide{max-width:760px;}
+h1{font-size:1.3rem;font-weight:650;margin:0 0 22px;letter-spacing:-0.01em;}
+.acct{color:var(--sub);font-size:0.86rem;margin:0 0 22px;}
+
+/* topbar / brand */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:26px;
+  flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:11px;}
+.brandmark{width:36px;height:36px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;font-size:1.05rem;background:linear-gradient(135deg,#5b8dee,#2f5bc7);
+  box-shadow:0 2px 10px rgba(91,141,238,0.35);}
+.brandname{font-weight:700;font-size:1.08rem;letter-spacing:-0.01em;line-height:1.15;}
+.brandsub{color:var(--sub);font-size:0.72rem;letter-spacing:0.01em;}
+.navtabs{display:flex;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:3px;}
+.navtab{background:none;border:none;color:var(--sub);font-size:0.83rem;font-weight:600;padding:7px 14px;
+  border-radius:7px;cursor:pointer;font-family:var(--sans);position:relative;}
+.navtab.active{background:var(--panel);color:var(--text);}
+.navbadge{display:inline-block;margin-left:6px;background:var(--accent);color:#fff;border-radius:9px;
+  font-size:0.66rem;padding:1px 6px;font-weight:700;vertical-align:1px;}
+
+/* stepper */
+.steps{display:flex;align-items:center;gap:6px;margin-bottom:24px;}
+.step{display:flex;align-items:center;gap:8px;flex:1;}
+.step .num{width:24px;height:24px;border-radius:50%;border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:var(--mute);
+  flex-shrink:0;background:var(--panel);transition:all .25s;}
+.step .lbl{font-size:0.78rem;color:var(--mute);white-space:nowrap;transition:color .25s;}
+.step.active .num{border-color:var(--accent);color:var(--accent);}
+.step.active .lbl{color:var(--text);}
+.step.done .num{border-color:var(--safe);color:var(--safe);background:var(--safe-dim);}
+.steplink{flex:1;height:1px;background:var(--line);}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;}
+.view{display:none;animation:fadein .35s ease;}
+.view.active{display:block;}
+@keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+/* form */
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:0.8rem;color:var(--sub);margin-bottom:6px;}
+.field input, .field select, .field textarea{
+  width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  border-radius:8px;padding:11px 12px;font-size:0.94rem;font-family:var(--sans);
+}
+.field input:focus, .field select:focus, .field textarea:focus{outline:none;border-color:var(--accent);}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:480px){.row2{grid-template-columns:1fr;}}
+.hint{font-size:0.74rem;color:var(--mute);margin-top:5px;}
+.sectionlbl{font-size:0.72rem;font-weight:650;text-transform:uppercase;letter-spacing:0.04em;
+  color:var(--mute);margin:18px 0 12px;}
+.sectionlbl:first-child{margin-top:0;}
+.amtprefix{position:relative;}
+.amtprefix span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--sub);font-size:0.94rem;}
+.amtprefix input{padding-left:26px;}
+
+.primary-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:9px;
+  padding:13px;font-size:0.96rem;font-weight:600;cursor:pointer;font-family:var(--sans);margin-top:6px;}
+.primary-btn:hover{background:#4a7bdc;}
+.primary-btn:disabled{opacity:0.45;cursor:default;}
+.ghost-btn{width:100%;background:transparent;color:var(--sub);border:1px solid var(--line);
+  border-radius:9px;padding:11px;font-size:0.88rem;cursor:pointer;font-family:var(--sans);margin-top:10px;}
+.ghost-btn:hover{color:var(--text);border-color:var(--mute);}
+.linkbtn{background:none;border:none;color:var(--accent);font-size:0.82rem;cursor:pointer;padding:0;font-family:var(--sans);}
+
+/* screening view */
+.screening-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:50px 10px;gap:14px;}
+.spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);
+  border-top-color:var(--accent);animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.screening-loading p{color:var(--sub);font-size:0.88rem;margin:0;}
+
+.summary{display:flex;justify-content:space-between;align-items:center;background:var(--panel2);
+  border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:18px;font-size:0.88rem;}
+.summary .to{font-weight:600;}
+.summary .amt{font-family:var(--mono);font-weight:600;font-size:1.05rem;}
+
+.factors{border-top:1px solid var(--line);margin-top:4px;}
+.frow{display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid var(--line);}
+.frow .fname{font-size:0.85rem;color:var(--sub);max-width:62%;}
+.frow .fval{font-family:var(--mono);font-size:0.8rem;color:var(--mute);text-align:right;white-space:nowrap;}
+.frow.hit .fname{color:var(--text);}
+.frow.hit .fval{color:var(--warn);}
+.frow.hit.severe .fval{color:var(--stop);}
+
+.score-block{margin-top:20px;}
+.score-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+.score-label{color:var(--sub);font-size:0.82rem;}
+.score-num{font-family:var(--mono);font-size:1.9rem;font-weight:650;}
+.bar-track{height:9px;border-radius:5px;background:var(--panel2);overflow:hidden;border:1px solid var(--line);}
+.bar-fill{height:100%;width:0%;border-radius:5px;transition:width .7s cubic-bezier(.2,.8,.3,1);}
+
+/* outcome */
+.outcome-icon{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:1.6rem;margin-bottom:16px;}
+.outcome-title{font-size:1.2rem;font-weight:650;margin:0 0 6px;}
+.outcome-desc{color:var(--sub);font-size:0.9rem;line-height:1.55;margin:0 0 18px;}
+.receipt{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+  font-size:0.84rem;margin-bottom:18px;}
+.receipt div{display:flex;justify-content:space-between;padding:5px 0;color:var(--sub);}
+.receipt div b{color:var(--text);font-weight:500;font-family:var(--mono);}
+.session-note{font-size:0.78rem;color:var(--mute);margin-top:16px;line-height:1.5;text-align:center;}
+
+/* activity dashboard */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;}
+@media(max-width:620px){.stat-grid{grid-template-columns:repeat(2,1fr);}}
+.stat-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;}
+.stat-card .stat-num{font-family:var(--mono);font-size:1.5rem;font-weight:650;}
+.stat-card .stat-lbl{color:var(--sub);font-size:0.74rem;margin-top:3px;}
+.stat-card.safe .stat-num{color:var(--safe);}
+.stat-card.warn .stat-num{color:var(--warn);}
+.stat-card.stop .stat-num{color:var(--stop);}
+
+.ledger-note{display:flex;align-items:center;gap:8px;font-size:0.78rem;color:var(--mute);
+  margin-bottom:16px;}
+.livedot{width:7px;height:7px;border-radius:50%;background:var(--safe);flex-shrink:0;
+  box-shadow:0 0 0 0 rgba(61,220,151,0.6);animation:pulse 2s infinite;}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(61,220,151,0.5);}70%{box-shadow:0 0 0 6px rgba(61,220,151,0);}100%{box-shadow:0 0 0 0 rgba(61,220,151,0);}}
+
+.txn-table{width:100%;border-collapse:collapse;font-size:0.83rem;}
+.txn-table th{text-align:left;color:var(--mute);font-weight:600;font-size:0.72rem;
+  text-transform:uppercase;letter-spacing:0.03em;padding:0 10px 10px;border-bottom:1px solid var(--line);}
+.txn-table td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+.txn-table tr:last-child td{border-bottom:none;}
+.txn-recipient{font-weight:600;}
+.txn-sub{color:var(--sub);font-size:0.76rem;}
+.txn-amt{font-family:var(--mono);white-space:nowrap;}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;
+  font-size:0.72rem;font-weight:650;white-space:nowrap;}
+.badge.safe{background:var(--safe-dim);color:var(--safe);}
+.badge.warn{background:var(--warn-dim);color:var(--warn);}
+.badge.stop{background:var(--stop-dim);color:var(--stop);}
+.txn-table-wrap{overflow-x:auto;}
+.empty-state{text-align:center;color:var(--mute);font-size:0.86rem;padding:40px 10px;}
+
+/* do-not-proceed notification */
+.toast{position:fixed;top:calc(18px + env(safe-area-inset-top, 0px));left:50%;
+  transform:translateX(-50%) translateY(-12px);width:min(92vw,480px);z-index:1000;
+  border-radius:12px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start;
+  box-shadow:0 12px 32px rgba(0,0,0,0.35);opacity:0;transition:opacity .25s, transform .25s;
+  border:1px solid;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.warn{background:var(--warn-dim);border-color:var(--warn);}
+.toast.stop{background:var(--stop-dim);border-color:var(--stop);}
+.toast-icon{font-size:1.2rem;flex-shrink:0;line-height:1.3;}
+.toast-body{flex:1;}
+.toast-title{font-weight:700;font-size:0.92rem;margin-bottom:2px;}
+.toast.warn .toast-title{color:var(--warn);}
+.toast.stop .toast-title{color:var(--stop);}
+.toast-msg{font-size:0.82rem;color:var(--text);line-height:1.4;}
+.toast-close{background:none;border:none;color:var(--sub);font-size:1rem;cursor:pointer;
+  padding:0;line-height:1;flex-shrink:0;}
+
+.dnp-banner{display:flex;gap:12px;align-items:flex-start;border-radius:10px;padding:13px 15px;
+  margin-bottom:18px;border:1px solid;}
+.dnp-banner.warn{background:var(--warn-dim);border-color:var(--warn);}
+.dnp-banner.stop{background:var(--stop-dim);border-color:var(--stop);}
+.dnp-banner .toast-icon{font-size:1.1rem;}
+.dnp-banner .toast-title{font-size:0.88rem;}
+.dnp-banner .toast-msg{font-size:0.8rem;}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrapEl">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brandmark">🛡️</div>
+      <div><div class="brandname">Warden</div><div class="brandsub">Real-time transaction screening</div></div>
+    </div>
+    <div class="navtabs">
+      <button class="navtab active" id="navSend">Send</button>
+      <button class="navtab" id="navActivity">Activity<span class="navbadge" id="navBadge" style="display:none;">0</span></button>
+    </div>
+  </div>
+
+  <div id="sendPanel">
+  <div class="steps">
+    <div class="step active" id="step1"><div class="num">1</div><div class="lbl">Details</div></div>
+    <div class="steplink"></div>
+    <div class="step" id="step2"><div class="num">2</div><div class="lbl">Screening</div></div>
+    <div class="steplink"></div>
+    <div class="step" id="step3"><div class="num">3</div><div class="lbl">Outcome</div></div>
+  </div>
+
+  <div class="card">
+
+    <!-- ============ VIEW 1: TRANSFER DETAILS ============ -->
+    <div class="view active" id="view1">
+      <div class="sectionlbl">Your account profile</div>
+      <p class="hint" style="margin:-6px 0 14px;">Normally pulled straight from your bank's records — exposed here as editable fields so you can test how the model reacts to different customer profiles.</p>
+      <div class="row2">
+        <div class="field">
+          <label>Average transaction amount</label>
+          <div class="amtprefix"><span>₹</span><input type="number" id="profAvgAmt" value="45000" min="1"></div>
+        </div>
+        <div class="field">
+          <label>Typical transfers / month</label>
+          <input type="number" id="profFreq" value="6" min="0">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Account age (months)</label>
+          <input type="number" id="profAge" value="24" min="0">
+        </div>
+        <div class="field">
+          <label>Occupation</label>
+          <select id="profOccupation">
+            <option value="salaried">Salaried employee</option>
+            <option value="business_owner">Business owner</option>
+            <option value="trader">Trader / investor</option>
+            <option value="freelancer">Freelancer</option>
+            <option value="retired">Retired</option>
+            <option value="student">Student</option>
+          </select>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.83rem;color:var(--sub);margin:-4px 0 18px;cursor:pointer;">
+        <input type="checkbox" id="profPEP" style="width:auto;"> Politically exposed person, or close associate/family member of one
+      </label>
+
+      <div class="sectionlbl">This transfer</div>
+      <div class="field">
+        <label>Recipient name</label>
+        <input type="text" id="rName" placeholder="e.g. Rohit Verma">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Account number / UPI ID</label>
+          <input type="text" id="rAccount" placeholder="e.g. rohit@upi or 5011...">
+        </div>
+        <div class="field">
+          <label>Recipient location</label>
+          <select id="rLocation">
+            <option value="domestic">Domestic (India)</option>
+            <option value="intl">International</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" id="countryField" style="display:none;">
+        <label>Recipient country</label>
+        <select id="rCountry">
+          <option value="US">United States</option>
+          <option value="UK">United Kingdom</option>
+          <option value="AE">United Arab Emirates</option>
+          <option value="SG">Singapore</option>
+          <option value="DE">Germany</option>
+          <option value="AF">Afghanistan</option>
+          <option value="IR">Iran</option>
+          <option value="MM">Myanmar</option>
+          <option value="KP">North Korea</option>
+        </select>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Amount</label>
+          <div class="amtprefix"><span>₹</span><input type="number" id="amount" placeholder="50,000" min="1"></div>
+        </div>
+        <div class="field">
+          <label>Transfer method</label>
+          <select id="method"></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Purpose of transfer</label>
+        <select id="purpose">
+          <option value="family">Family / personal support</option>
+          <option value="goods">Payment for goods or services</option>
+          <option value="business">Business payment</option>
+          <option value="investment">Investment</option>
+          <option value="loan">Loan / EMI repayment</option>
+          <option value="gift">Gift</option>
+          <option value="other">Other / prefer not to say</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Note <span style="color:var(--mute)">(optional)</span></label>
+        <input type="text" id="note" placeholder="What's this for?">
+      </div>
+      <button class="primary-btn" id="reviewBtn">Review transfer →</button>
+      <p class="hint" style="text-align:center;margin-top:12px;">Submitting sends these details to your bank the same way an app would call its transfer API — the risk engine takes it from there.</p>
+    </div>
+
+    <!-- ============ VIEW 2: SCREENING ============ -->
+    <div class="view" id="view2">
+      <div class="screening-loading" id="screeningLoading">
+        <div class="spinner"></div>
+        <p>Screening transfer against account activity, watchlists and behavioural baselines…</p>
+      </div>
+      <div id="screeningResult" style="display:none;">
+        <div class="summary">
+          <div>Transfer to <span class="to" id="sumTo">—</span><br><span style="color:var(--sub);font-size:0.78rem;" id="sumMethod">—</span></div>
+          <div class="amt" id="sumAmt">₹0</div>
+        </div>
+        <div class="factors" id="factorList"></div>
+        <div class="score-block">
+          <div class="score-top"><span class="score-label">Composite risk score</span><span class="score-num" id="scoreNum">0</span></div>
+          <div class="bar-track"><div class="bar-fill" id="scoreBar"></div></div>
+        </div>
+        <button class="primary-btn" id="continueBtn">See outcome →</button>
+        <button class="ghost-btn" id="editBtn">← Edit transfer details</button>
+      </div>
+    </div>
+
+    <!-- ============ VIEW 3: OUTCOME ============ -->
+    <div class="view" id="view3">
+      <div id="dnpBanner"></div>
+      <div class="outcome-icon" id="outIcon">✓</div>
+      <div class="outcome-title" id="outTitle">Approved</div>
+      <p class="outcome-desc" id="outDesc">—</p>
+      <div class="receipt" id="receipt"></div>
+      <button class="primary-btn" id="newTransferBtn">Send another transfer</button>
+      <p class="session-note" id="sessionNote"></p>
+    </div>
+
+  </div>
+  </div><!-- /sendPanel -->
+
+  <div id="activityPanel" style="display:none;">
+    <div class="ledger-note"><span class="livedot"></span>Live, organization-wide screening ledger — every transfer sent through Warden lands here in real time.</div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-num" id="statTotal">0</div><div class="stat-lbl">Screened</div></div>
+      <div class="stat-card safe"><div class="stat-num" id="statPass">0</div><div class="stat-lbl">Approved</div></div>
+      <div class="stat-card warn"><div class="stat-num" id="statFlag">0</div><div class="stat-lbl">Held for review</div></div>
+      <div class="stat-card stop"><div class="stat-num" id="statBlock">0</div><div class="stat-lbl">Blocked</div></div>
+    </div>
+    <div class="card" style="padding:16px;">
+      <div class="txn-table-wrap">
+        <table class="txn-table" id="txnTable">
+          <thead><tr><th>Recipient</th><th>Amount</th><th>Score</th><th>Status</th><th>When</th></tr></thead>
+          <tbody id="txnBody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="txnEmpty" style="display:none;">No transactions screened yet. Send one from the Send tab to see it appear here.</div>
+    </div>
+  </div><!-- /activityPanel -->
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const CTR_THRESHOLD = 1000000;
+const HIGH_RISK = {AF:"Afghanistan", IR:"Iran", MM:"Myanmar", KP:"North Korea"};
+const MID_RISK_LABELS = {US:"United States", UK:"United Kingdom", AE:"United Arab Emirates", SG:"Singapore", DE:"Germany"};
+
+const sender = {
+  homeCountry: "India",
+  knownPayees: new Set(["rohit verma", "priya nair"]),
+};
+
+const OCCUPATION_CEILING = {
+  student: 100000, retired: 200000, salaried: 400000,
+  freelancer: 500000, trader: 2000000, business_owner: 5000000,
+};
+
+let session = { sent: [] }; // {key, amount, isNew, tier, timestamp}
+let pending = null;
+
+const methodOptions = {
+  domestic: ["UPI","IMPS","NEFT","RTGS","Cash deposit"],
+  intl: ["International wire (SWIFT)"],
+};
+
+function refreshMethods(){
+  const loc = $("rLocation").value;
+  $("countryField").style.display = loc === "intl" ? "block" : "none";
+  const sel = $("method");
+  sel.innerHTML = "";
+  methodOptions[loc].forEach(m=>{
+    const o = document.createElement("option"); o.value = m; o.textContent = m; sel.appendChild(o);
+  });
+}
+$("rLocation").addEventListener("change", refreshMethods);
+refreshMethods();
+
+function setStep(n){
+  [1,2,3].forEach(i=>{
+    const el = $("step"+i);
+    el.classList.remove("active","done");
+    if(i < n) el.classList.add("done");
+    if(i === n) el.classList.add("active");
+  });
+  [1,2,3].forEach(i=> $("view"+i).classList.toggle("active", i===n));
+}
+
+function inr(n){ return "₹" + Math.round(n).toLocaleString("en-IN"); }
+
+// ---------- nav tabs ----------
+let currentTab = "send";
+$("navSend").onclick = () => switchTab("send");
+$("navActivity").onclick = () => switchTab("activity");
+function switchTab(tab){
+  currentTab = tab;
+  $("navSend").classList.toggle("active", tab==="send");
+  $("navActivity").classList.toggle("active", tab==="activity");
+  $("sendPanel").style.display = tab==="send" ? "block" : "none";
+  $("activityPanel").style.display = tab==="activity" ? "block" : "none";
+  $("wrapEl").classList.toggle("wide", tab==="activity");
+  if(tab==="activity") renderDashboard();
+}
+
+// ---------- database (org-shared ledger) ----------
+let dbInst = null;
+let txnDocs = [];
+(async () => {
+  try{
+    dbInst = await claude.use("db");
+    if(!dbInst) return;
+    dbInst.collection("transactions").orderBy("createdAt","desc").limit(50).onSnapshot(
+      snap => {
+        txnDocs = snap.docs.map(d=>d.data());
+        $("navBadge").style.display = txnDocs.length ? "inline-block" : "none";
+        $("navBadge").textContent = txnDocs.length;
+        if(currentTab==="activity") renderDashboard();
+      },
+      err => console.warn("db subscribe error", err)
+    );
+  }catch(e){ console.warn("db unavailable", e); }
+})();
+
+async function saveTransaction(t, ref){
+  if(!dbInst) return;
+  try{
+    await dbInst.collection("transactions").add({
+      name: t.name, account: t.account, amount: t.amount, method: t.method,
+      purpose: t.purpose, loc: t.loc, country: t.country, occupation: t.profOccupation,
+      score: t.score, tier: t.tier, ref, createdAt: new Date().toISOString(),
+    });
+  }catch(e){ console.warn("db write failed", e); }
+}
+
+// ---------- do-not-proceed notification ----------
+function dnpContent(tier){
+  if(tier === "block"){
+    return {cls:"stop", icon:"⛔", title:"Do not proceed with this transaction",
+      msg:"Risk score is above the auto-block threshold. Funds must not be released — this transfer is being referred to compliance."};
+  }
+  return {cls:"warn", icon:"⚠", title:"Do not proceed until reviewed",
+    msg:"Risk score has crossed the review threshold. Hold this transfer until a compliance analyst clears it."};
+}
+
+let toastTimer = null;
+function showToast(tier){
+  const c = dnpContent(tier);
+  let el = document.getElementById("dnpToast");
+  if(el) el.remove();
+  el = document.createElement("div");
+  el.id = "dnpToast";
+  el.className = "toast " + c.cls;
+  el.innerHTML = `<div class="toast-icon">${c.icon}</div>
+    <div class="toast-body"><div class="toast-title">${c.title}</div><div class="toast-msg">${c.msg}</div></div>
+    <button class="toast-close" aria-label="Dismiss">✕</button>`;
+  document.body.appendChild(el);
+  el.querySelector(".toast-close").onclick = () => dismissToast();
+  requestAnimationFrame(() => el.classList.add("show"));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(dismissToast, 6000);
+}
+function dismissToast(){
+  const el = document.getElementById("dnpToast");
+  if(!el) return;
+  el.classList.remove("show");
+  setTimeout(() => el.remove(), 250);
+}
+
+function renderDnpBanner(tier){
+  const holder = $("dnpBanner");
+  if(tier === "pass"){ holder.innerHTML = ""; return; }
+  const c = dnpContent(tier);
+  holder.innerHTML = `<div class="dnp-banner ${c.cls}">
+    <div class="toast-icon">${c.icon}</div>
+    <div class="toast-body"><div class="toast-title">${c.title}</div><div class="toast-msg">${c.msg}</div></div>
+  </div>`;
+}
+
+function tierBadge(tier){
+  if(tier==="pass") return '<span class="badge safe">✓ Approved</span>';
+  if(tier==="flag") return '<span class="badge warn">⚠ Held</span>';
+  return '<span class="badge stop">⛔ Blocked</span>';
+}
+
+function timeAgo(iso){
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime())/1000);
+  if(s < 60) return "just now";
+  if(s < 3600) return Math.floor(s/60) + "m ago";
+  if(s < 86400) return Math.floor(s/3600) + "h ago";
+  return Math.floor(s/86400) + "d ago";
+}
+
+function renderDashboard(){
+  const total = txnDocs.length;
+  const pass = txnDocs.filter(d=>d.tier==="pass").length;
+  const flag = txnDocs.filter(d=>d.tier==="flag").length;
+  const block = txnDocs.filter(d=>d.tier==="block").length;
+  $("statTotal").textContent = total;
+  $("statPass").textContent = pass;
+  $("statFlag").textContent = flag;
+  $("statBlock").textContent = block;
+
+  const body = $("txnBody");
+  $("txnTable").style.display = total ? "table" : "none";
+  $("txnEmpty").style.display = total ? "none" : "block";
+  body.innerHTML = txnDocs.map(d => `
+    <tr>
+      <td><div class="txn-recipient">${d.name||"—"}</div><div class="txn-sub">${d.loc==="intl" ? (d.country||"International") : "Domestic"} · ${d.method||""}</div></td>
+      <td class="txn-amt">${inr(d.amount||0)}</td>
+      <td class="txn-amt">${d.score ?? "—"}</td>
+      <td>${tierBadge(d.tier)}</td>
+      <td class="txn-sub">${d.createdAt ? timeAgo(d.createdAt) : "—"}</td>
+    </tr>`).join("");
+}
+
+// ---------- submit transfer details ----------
+$("reviewBtn").onclick = () => {
+  const name = $("rName").value.trim();
+  const account = $("rAccount").value.trim();
+  const amount = parseFloat($("amount").value);
+  if(!name || !account || !amount || amount <= 0){
+    alert("Please fill in recipient name, account/UPI ID, and a valid amount.");
+    return;
+  }
+  const profAvgAmt = Math.max(1000, parseFloat($("profAvgAmt").value) || 45000);
+  const profFreq = Math.max(0, parseFloat($("profFreq").value) || 0);
+  const profAge = Math.max(0, parseFloat($("profAge").value) || 0);
+  const profOccupation = $("profOccupation").value;
+  const profPEP = $("profPEP").checked;
+
+  const loc = $("rLocation").value;
+  const country = loc === "intl" ? $("rCountry").value : "IN";
+  const method = $("method").value;
+  const purpose = $("purpose").value;
+
+  const key = (name + "|" + account).toLowerCase();
+  const isKnown = sender.knownPayees.has(name.toLowerCase()) ||
+                  session.sent.some(s => s.key === key);
+  const newPayeesThisSession = new Set(session.sent.filter(s=>s.isNew).map(s=>s.key)).size;
+
+  // simulated watchlist screening — deterministic hash on recipient identity
+  let h = 0;
+  const sig = (name+account).toLowerCase();
+  for(let i=0;i<sig.length;i++) h = (h*31 + sig.charCodeAt(i)) >>> 0;
+  const watchlistHit = /fze|trading co|shell|offshore holdings/i.test(name) || /9999$/.test(account) || (h % 137 === 0);
+
+  pending = {name, account, amount, loc, country, method, purpose, key, isKnown,
+             profAvgAmt, profFreq, profAge, profOccupation, profPEP};
+  pending.watchlistHit = watchlistHit;
+  pending.sessionFreq = session.sent.length;
+  pending.newPayeesThisSession = newPayeesThisSession;
+
+  runScreening(pending);
+};
+
+function runScreening(t){
+  setStep(2);
+  $("screeningLoading").style.display = "flex";
+  $("screeningResult").style.display = "none";
+
+  setTimeout(() => {
+    const amtRatio = t.amount / t.profAvgAmt;
+    const isHighRiskGeo = !!HIGH_RISK[t.country];
+    const isGeoMismatch = t.loc === "intl";
+    const isCashOrWire = t.method === "Cash deposit" || t.method === "International wire (SWIFT)";
+    const nearThreshold = t.method === "Cash deposit" && t.amount >= CTR_THRESHOLD*0.8 && t.amount < CTR_THRESHOLD;
+    const noPurpose = (t.purpose === "other") && amtRatio >= 2;
+    const firstTimeLarge = !t.isKnown && amtRatio >= 1.5;
+    const payeeBurst = t.newPayeesThisSession >= 2 && !t.isKnown;
+    const freqBurst = t.sessionFreq >= 3;
+    const ceiling = OCCUPATION_CEILING[t.profOccupation] || 400000;
+    const occupationMismatch = t.amount > ceiling * 1.5;
+    const newAccountLargeTxn = t.profAge <= 3 && amtRatio >= 3;
+
+    const flags = [
+      {name:"Amount vs. your typical transfer", val: `${inr(t.amount)} (${amtRatio.toFixed(1)}× of ${inr(t.profAvgAmt)})`,
+        w:0.17, hit: amtRatio>=2.5, severe: amtRatio>=6},
+      {name:"Amount vs. stated occupation", val: `${t.profOccupation.replace("_"," ")} · typical ceiling ${inr(ceiling)}`,
+        w:0.10, hit: occupationMismatch, severe: t.amount > ceiling*3},
+      {name:"Recipient relationship", val: t.isKnown? "Saved / previously paid" : "First-time payee",
+        w:0.08, hit: firstTimeLarge, severe:false},
+      {name:"New payees this session", val: t.newPayeesThisSession + (t.newPayeesThisSession===1?" payee":" payees"),
+        w:0.11, hit: payeeBurst, severe: t.newPayeesThisSession>=4},
+      {name:"Transfer frequency this session", val: t.sessionFreq + " prior transfers",
+        w:0.09, hit: freqBurst, severe: t.sessionFreq>=6},
+      {name:"Account age", val: t.profAge + " months",
+        w:0.07, hit: newAccountLargeTxn, severe: t.profAge<=1 && amtRatio>=5},
+      {name:"Stated purpose", val: t.purpose==="other" ? "Not specified" : t.purpose,
+        w:0.07, hit: noPurpose, severe:false},
+      {name:"Structuring check (cash, near reporting threshold)", val: nearThreshold? "within range":"clear",
+        w:0.10, hit: nearThreshold, severe:false},
+      {name:"Cross-border destination", val: t.loc==="intl" ? (MID_RISK_LABELS[t.country]||HIGH_RISK[t.country]||t.country) : "Domestic",
+        w:0.05, hit: isGeoMismatch && !isHighRiskGeo, severe:false},
+      {name:"High-risk jurisdiction", val: isHighRiskGeo ? HIGH_RISK[t.country] : "not applicable",
+        w:0.10, hit: isHighRiskGeo, severe:true},
+      {name:"Sanctions / adverse-media screening", val: t.watchlistHit? "match found":"clear",
+        w:0.04, hit: t.watchlistHit, severe:true},
+      {name:"PEP status on file", val: t.profPEP? "Yes":"No",
+        w:0.04, hit: t.profPEP, severe:false},
+      {name:"Channel risk", val: t.method, w:0.03, hit: isCashOrWire, severe:false},
+    ];
+
+    let score = 0;
+    flags.forEach(f => { if(f.hit) score += f.w * (f.severe? 100:70); });
+    score = Math.min(100, Math.round(score));
+    if(t.watchlistHit) score = Math.max(score, 96);
+    t.score = score; t.flags = flags;
+
+    renderScreening(t);
+  }, 1300);
+}
+
+function renderScreening(t){
+  $("screeningLoading").style.display = "none";
+  $("screeningResult").style.display = "block";
+  $("sumTo").textContent = t.name;
+  $("sumMethod").textContent = t.method + (t.loc==="intl" ? " · " + (MID_RISK_LABELS[t.country]||HIGH_RISK[t.country]||t.country) : " · Domestic");
+  $("sumAmt").textContent = inr(t.amount);
+
+  const list = $("factorList");
+  list.innerHTML = "";
+  t.flags.forEach(f=>{
+    const row = document.createElement("div");
+    row.className = "frow" + (f.hit? " hit":"") + (f.hit && f.severe? " severe":"");
+    row.innerHTML = `<span class="fname">${f.name}</span><span class="fval">${f.val}</span>`;
+    list.appendChild(row);
+  });
+
+  const color = t.score>=70? "var(--stop)" : t.score>=35? "var(--warn)" : "var(--safe)";
+  $("scoreNum").textContent = t.score;
+  $("scoreNum").style.color = color;
+  $("scoreBar").style.width = t.score + "%";
+  $("scoreBar").style.background = color;
+
+  if(t.score >= 70) showToast("block");
+  else if(t.score >= 35) showToast("flag");
+}
+
+$("editBtn").onclick = () => setStep(1);
+
+$("continueBtn").onclick = () => {
+  const t = pending;
+  const tier = t.score>=70? "block" : t.score>=35? "flag" : "pass";
+  t.tier = tier;
+  dismissToast();
+  renderDnpBanner(tier);
+  session.sent.push({key:t.key, amount:t.amount, isNew: !t.isKnown, tier, timestamp: Date.now()});
+  sender.knownPayees.add(t.name.toLowerCase());
+
+  const ref = "TXN" + Math.random().toString(36).slice(2,9).toUpperCase();
+  const icon = $("outIcon"), title = $("outTitle"), desc = $("outDesc"), receipt = $("receipt");
+
+  icon.className = "outcome-icon";
+  if(tier === "pass"){
+    icon.style.background = "var(--safe-dim)"; icon.style.color = "var(--safe)"; icon.textContent = "✓";
+    title.textContent = "Transfer completed";
+    desc.textContent = `${inr(t.amount)} has been sent to ${t.name}. Funds are available to the recipient immediately.`;
+    receipt.innerHTML = `<div>Status <b>Completed</b></div><div>Reference <b>${ref}</b></div><div>Risk score <b>${t.score}/100</b></div>`;
+  } else if(tier === "flag"){
+    icon.style.background = "var(--warn-dim)"; icon.style.color = "var(--warn)"; icon.textContent = "⚠";
+    title.textContent = "Held for review";
+    desc.textContent = `This transfer has enough risk indicators to need a quick look from our compliance team. Funds stay in your account until it clears — typically within 4 hours.`;
+    receipt.innerHTML = `<div>Status <b>Pending review</b></div><div>Case reference <b>CASE-${ref}</b></div><div>Risk score <b>${t.score}/100</b></div><div>Expected review time <b>&lt; 4 hours</b></div>`;
+  } else {
+    icon.style.background = "var(--stop-dim)"; icon.style.color = "var(--stop)"; icon.textContent = "⛔";
+    title.textContent = "Transfer blocked";
+    desc.textContent = `This transfer was not released. It's been referred to compliance for investigation, and a suspicious transaction report has been drafted for officer review. No funds have left your account.`;
+    receipt.innerHTML = `<div>Status <b>Blocked</b></div><div>Compliance reference <b>STR-${ref}</b></div><div>Risk score <b>${t.score}/100</b></div>`;
+  }
+
+  const held = session.sent.filter(s=>s.tier!=="pass").length;
+  $("sessionNote").textContent = `This session: ${session.sent.length} transfer${session.sent.length===1?"":"s"} sent, ${held} held or blocked.`;
+
+  saveTransaction(t, ref);
+  setStep(3);
+};
+
+$("newTransferBtn").onclick = () => {
+  $("rName").value = ""; $("rAccount").value = ""; $("amount").value = "";
+  $("note").value = ""; $("rLocation").value = "domestic"; refreshMethods();
+  $("purpose").value = "family";
+  dismissToast();
+  setStep(1);
+};
+</script>
+</body>
+</html>
