@@ -11,12 +11,7 @@
   - `run_all.sh`        runs all three in order
 - `ui/index.html`  the Warden demo UI (single file, open in a browser)
 
-## Run the engine
-    cd engine
-    pip install -r requirements.txt
-    ./run_all.sh        (or run the three scripts in order)
 
-Outputs: `model_evaluation.png`, `scored_transactions.csv`.
 
 ## Notes
 - The UI's risk score is a simplified weighted approximation of the model's feature
